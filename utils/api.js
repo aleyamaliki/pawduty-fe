@@ -10,9 +10,10 @@ export class ApiError extends Error {
 }
 
 async function request(path, options = {}) {
+  const { headers: customHeaders, ...rest } = options;
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
+    headers: { 'Content-Type': 'application/json', ...customHeaders },
+    ...rest,
   });
   if (!res.ok) {
     let detail;
