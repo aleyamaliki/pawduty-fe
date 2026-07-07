@@ -3,7 +3,10 @@ import Constants from 'expo-constants';
 // ml-heat cat-thermal-health service (FastAPI): `uvicorn api.main:app` → :8000.
 // Kept separate from the task-api base (constants/api.js, :8001).
 export const ML_PORT = 8000;
-export const ML_OVERRIDE = null; // e.g. 'http://192.168.1.42:8000' for tunnel/edge cases
+// Deployed ml-heat URL for a production/demo build. Set via the gitignored
+// .env.local (EXPO_PUBLIC_ML_API_URL=https://…) so the URL stays out of git.
+// When unset, falls back to the auto-derived local dev host (http://<metro-host>:8000).
+export const ML_OVERRIDE = process.env.EXPO_PUBLIC_ML_API_URL ?? null;
 
 function deriveHost() {
   const hostUri =

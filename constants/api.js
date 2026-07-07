@@ -1,10 +1,10 @@
 import Constants from 'expo-constants';
 
 export const PORT = 8001; // matches task-api README run command
-// Set to your deployed task-api URL (e.g. 'https://<task-api-host>') for a
-// production/demo build; keep it out of version control. null falls back to the
-// auto-derived local dev host (http://<metro-host>:8001).
-export const OVERRIDE = null;
+// Deployed task-api URL for a production/demo build. Set via the gitignored
+// .env.local (EXPO_PUBLIC_TASK_API_URL=https://…) so the URL stays out of git.
+// When unset, falls back to the auto-derived local dev host (http://<metro-host>:8001).
+export const OVERRIDE = process.env.EXPO_PUBLIC_TASK_API_URL ?? null;
 
 function deriveHost() {
   const hostUri =
