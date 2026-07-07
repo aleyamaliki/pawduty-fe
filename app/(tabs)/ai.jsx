@@ -39,21 +39,39 @@ export default function AIScreen() {
   const [error, setError] = useState(null);
   const router = useRouter();
 
-  async function handlePick() {
-    setError(null);
-    let picked;
-    try {
-      picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    } catch (e) {
-      setError('Could not open the image library.');
-      return;
-    }
-    if (picked.canceled) return;
+  // Both the camera and the library return the same { canceled, assets } shape.
+  async function processPicked(picked) {
+    if (!picked || picked.canceled) return;
     const uri = picked.assets?.[0]?.uri;
     if (!uri) return;
     setImageUri(uri);
     setResult(null);
     await runScan(uri);
+  }
+
+  async function handleCamera() {
+    setError(null);
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        setError('Camera permission is needed to take a photo.');
+        return;
+      }
+      const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
+      await processPicked(shot);
+    } catch (e) {
+      setError('Could not open the camera on this device.');
+    }
+  }
+
+  async function handlePick() {
+    setError(null);
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      await processPicked(picked);
+    } catch (e) {
+      setError('Could not open the image library.');
+    }
   }
 
   async function runScan(uri) {
@@ -87,22 +105,33 @@ export default function AIScreen() {
     setScanning(false);
   }
 
+  const showPickers = !imageUri && !scanning;
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.heading}>Thermal Health Scan</Text>
         <Text style={styles.sub}>
-          Upload a thermal image of your cat (INFERNO-colormapped, with the min/max °C badges)
-          to check for abnormal body-heat patterns.
+          Take or upload a thermal image of your cat (INFERNO-colormapped, with the min/max °C
+          badges) to check for abnormal body-heat patterns. A thermal camera is required for a
+          live capture — a normal photo isn't a thermal frame.
         </Text>
 
-        {imageUri ? (
+        {imageUri && (
           <Image testID="scan-preview" source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
-        ) : (
-          <TouchableOpacity testID="pick-button" style={styles.dropzone} onPress={handlePick} activeOpacity={0.8}>
-            <Ionicons name="cloud-upload-outline" size={46} color={COLORS.primary} />
-            <Text style={styles.dropzoneText}>Tap to select a thermal image</Text>
-          </TouchableOpacity>
+        )}
+
+        {showPickers && (
+          <View style={styles.actions}>
+            <TouchableOpacity testID="camera-button" style={styles.actionBtn} onPress={handleCamera} activeOpacity={0.8}>
+              <Ionicons name="camera-outline" size={40} color={COLORS.primary} />
+              <Text style={styles.actionText}>Take Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity testID="pick-button" style={styles.actionBtn} onPress={handlePick} activeOpacity={0.8}>
+              <Ionicons name="cloud-upload-outline" size={40} color={COLORS.primary} />
+              <Text style={styles.actionText}>Upload Image</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {scanning && (
@@ -115,8 +144,8 @@ export default function AIScreen() {
         {error && !scanning && (
           <View style={styles.errorBox}>
             <Text testID="scan-error" style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={handlePick}>
-              <Text style={styles.secondaryBtnText}>Choose another image</Text>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={reset}>
+              <Text style={styles.secondaryBtnText}>Try another image</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -150,13 +179,14 @@ const styles = StyleSheet.create({
   scroll: { padding: SPACING.md, paddingBottom: SPACING.xl * 2 },
   heading: { fontSize: 24, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.xs },
   sub: { fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.lg, lineHeight: 18 },
-  dropzone: {
-    borderWidth: 2, borderColor: COLORS.border, borderStyle: 'dashed', borderRadius: RADIUS.lg,
-    paddingVertical: SPACING.xl * 1.5, alignItems: 'center', justifyContent: 'center',
+  actions: { flexDirection: 'row', gap: SPACING.md },
+  actionBtn: {
+    flex: 1, borderWidth: 2, borderColor: COLORS.border, borderStyle: 'dashed', borderRadius: RADIUS.lg,
+    paddingVertical: SPACING.xl, alignItems: 'center', justifyContent: 'center',
     backgroundColor: COLORS.card, gap: SPACING.sm,
   },
-  dropzoneText: { fontSize: 15, fontWeight: '600', color: COLORS.textSecondary },
-  preview: { width: '100%', aspectRatio: 4 / 3, borderRadius: RADIUS.lg, backgroundColor: '#000' },
+  actionText: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary },
+  preview: { width: '100%', aspectRatio: 4 / 3, borderRadius: RADIUS.lg, backgroundColor: '#000', marginBottom: SPACING.md },
   center: { alignItems: 'center', marginTop: SPACING.lg, gap: SPACING.sm },
   scanningText: { fontSize: 14, color: COLORS.textSecondary },
   errorBox: { marginTop: SPACING.lg, alignItems: 'center', gap: SPACING.md },

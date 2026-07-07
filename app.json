@@ -9,9 +9,10 @@
     },
     "plugins": [
       [
-        "expo-camera",
+        "expo-image-picker",
         {
-          "cameraPermission": "Allow PawDuty to access your camera to scan pet documents."
+          "photosPermission": "Allow PawDuty to access your photos to upload a thermal image.",
+          "cameraPermission": "Allow PawDuty to use the camera to capture a thermal image."
         }
       ]
     ]

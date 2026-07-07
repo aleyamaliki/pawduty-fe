@@ -6,6 +6,8 @@ import { scanThermal } from '../../utils/mlApi';
 
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
+  launchCameraAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
 }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
@@ -24,12 +26,28 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-test('renders the image-picker button', async () => {
+test('renders both the camera and upload buttons', async () => {
   let getByTestId;
   await act(async () => {
     ({ getByTestId } = await render(<AIScreen />));
   });
+  expect(getByTestId('camera-button')).toBeTruthy();
   expect(getByTestId('pick-button')).toBeTruthy();
+});
+
+test('capturing from the camera scans the photo', async () => {
+  ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///shot.jpg' }] });
+  scanThermal.mockResolvedValue({ tag: 'healthy', confidence: 0.8 });
+  let getByTestId, queryByText;
+  await act(async () => {
+    ({ getByTestId, queryByText } = await render(<AIScreen />));
+  });
+  await act(async () => {
+    fireEvent.press(getByTestId('camera-button'));
+  });
+  expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
+  expect(scanThermal).toHaveBeenCalledWith('file:///shot.jpg');
+  expect(queryByText('HEALTHY')).toBeTruthy();
 });
 
 test('picking an image scans it and shows the result', async () => {
