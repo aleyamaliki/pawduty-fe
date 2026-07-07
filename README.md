@@ -18,6 +18,7 @@ by two FastAPI services.
 - [Technology used](#technology-used)
 - [Repository layout](#repository-layout)
 - [Running the full system](#running-the-full-system)
+- [Deployment (Railway)](#deployment-railway)
 - [Testing](#testing)
 - [Testing matrix](#testing-matrix)
 - [Acknowledgements](#acknowledgements)
@@ -194,6 +195,57 @@ the Expo Go app ([iOS](https://apps.apple.com/app/expo-go/id982107779) /
 **Networking note:** on a physical device, the app auto-detects your machine's LAN IP from
 the Metro host. If that fails (VPN, tunnel), set `OVERRIDE` in `constants/api.js` (task-api)
 and/or `constants/mlApi.js` (scan service) to `http://<your-ip>:8001` / `:8000`.
+
+---
+
+## Deployment (Railway)
+
+Both backends run in production on [Railway](https://railway.com/), each as its own project
+built straight from its directory in the `ml-pawduty` repo. The Expo app runs from Metro
+(Expo Go / dev build) and reaches them via the `OVERRIDE` constants below.
+
+> **The live endpoint URLs are intentionally kept out of this repo.** Get them from the
+> Railway dashboard (or `railway domain`) and keep them in an untracked local config — see
+> "Point the app at production". Placeholders below stand in for the real hostnames.
+
+| Service | URL | Build |
+|---|---|---|
+| **ml-heat** (`service/`) | `https://<ml-heat-host>` | `Dockerfile` — `python:3.12-slim` + system **Tesseract OCR**, `scikit-learn==1.9.0` pinned to the shipped `.joblib` model |
+| **task-api** (`task-api/`) | `https://<task-api-host>` | Railpack (FastAPI auto-detected) + `Procfile` start command |
+
+> **task-api persistence:** SQLite lives on the container's ephemeral filesystem, so the DB
+> re-seeds (2 pets, 6 tasks) on every redeploy. Attach a Railway volume for durable data.
+
+**Smoke-test the live services** (substitute your real hosts):
+
+```bash
+# ml-heat — interactive docs, a real scan, and a no-body case (422)
+curl -s -o /dev/null -w "%{http_code}\n" https://<ml-heat-host>/docs   # → 200
+curl -F "image=@service/tests/fixtures/sick_indoor_caged.jpg" \
+     https://<ml-heat-host>/scan     # → {"tag":"unhealthy","confidence":0.69}
+
+# task-api — health + seeded data
+curl https://<task-api-host>/health   # → {"status":"ok"}
+curl https://<task-api-host>/tasks     # → 6 seeded tasks
+```
+
+**Point the app at production** — set the `OVERRIDE` constants to your real hosts (each
+falls back to the Expo-host-derived localhost URL when `null`). Keep the real URLs out of
+version control — leave the committed defaults as `null` and override locally:
+
+```js
+// constants/mlApi.js
+export const ML_OVERRIDE = 'https://<ml-heat-host>';
+// constants/api.js
+export const OVERRIDE = 'https://<task-api-host>';
+```
+
+**Redeploy** — from either service directory (each is linked to its Railway project):
+
+```bash
+cd service   && railway up      # ml-heat  — rebuilds the Dockerfile
+cd task-api  && railway up      # task-api
+```
 
 ---
 

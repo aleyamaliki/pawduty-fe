@@ -1,9 +1,10 @@
 import Constants from 'expo-constants';
 
 export const PORT = 8001; // matches task-api README run command
-// Deployed task-api (Railway). Set to null to fall back to the auto-derived
-// local dev host (http://<metro-host>:8001) when running the backend locally.
-export const OVERRIDE = 'https://<task-api-host>';
+// Set to your deployed task-api URL (e.g. 'https://<task-api-host>') for a
+// production/demo build; keep it out of version control. null falls back to the
+// auto-derived local dev host (http://<metro-host>:8001).
+export const OVERRIDE = null;
 
 function deriveHost() {
   const hostUri =
