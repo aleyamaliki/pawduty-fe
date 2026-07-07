@@ -5,7 +5,7 @@ import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import CategoryBadge from './CategoryBadge';
 import PetAvatar from './PetAvatar';
 
-export default function TaskCard({ task, pet, onToggle }) {
+export default function TaskCard({ task, pet, onToggle, onEdit, onDelete }) {
   return (
     <View style={styles.card}>
       <TouchableOpacity
@@ -20,7 +20,13 @@ export default function TaskCard({ task, pet, onToggle }) {
           color={task.done ? COLORS.accent : COLORS.textSecondary}
         />
       </TouchableOpacity>
-      <View style={styles.body}>
+      <TouchableOpacity
+        testID="task-edit"
+        style={styles.body}
+        activeOpacity={onEdit ? 0.6 : 1}
+        onPress={() => onEdit && onEdit(task)}
+        disabled={!onEdit}
+      >
         <Text style={[styles.title, task.done && styles.done]} numberOfLines={2}>
           {task.title}
         </Text>
@@ -46,7 +52,17 @@ export default function TaskCard({ task, pet, onToggle }) {
             </View>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
+      {onDelete && (
+        <TouchableOpacity
+          testID="task-delete"
+          onPress={() => onDelete(task)}
+          style={styles.delete}
+          accessibilityLabel="Delete task"
+        >
+          <Ionicons name="trash-outline" size={20} color={COLORS.textSecondary} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -69,4 +85,5 @@ const styles = StyleSheet.create({
   time: { fontSize: 12, color: COLORS.textSecondary },
   assignee: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   assigneeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  delete: { paddingLeft: SPACING.sm, justifyContent: 'center' },
 });

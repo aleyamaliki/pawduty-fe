@@ -2,16 +2,40 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { MOCK_SCANS } from '../../data/mockScans';
+import { scanThermal, MlScanError } from '../../utils/mlApi';
 import { COLORS, SPACING, RADIUS } from '../../constants/theme';
 
-let scanIndex = 0;
+const WARNING = '#E63946';
+
+// Map a { tag, confidence } response from the ml-heat thermal-health service to
+// what the result card shows and what an "Add as Task" follow-up prefills.
+function describe(health) {
+  const pct = Math.round(health.confidence * 100);
+  if (health.tag === 'unhealthy') {
+    return {
+      healthy: false,
+      title: 'Possible signs of illness',
+      detail: `The thermal scan flagged an abnormal body-heat pattern (${pct}% confidence). A vet check-up is recommended.`,
+      prefillTitle: 'Vet check-up',
+      prefillCategory: 'other',
+    };
+  }
+  return {
+    healthy: true,
+    title: 'Looks healthy',
+    detail: `No abnormal body-heat pattern detected (${pct}% confidence). Keep up the routine care.`,
+    prefillTitle: 'Routine wellness check',
+    prefillCategory: 'other',
+  };
+}
 
 export default function AIScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
   const slideAnim = useRef(new Animated.Value(300)).current;
+  const cameraRef = useRef(null);
   const router = useRouter();
 
   if (!permission) {
@@ -29,20 +53,31 @@ export default function AIScreen() {
     );
   }
 
-  function handleScan() {
+  async function handleScan() {
     if (scanning || result) return;
     setScanning(true);
-    setTimeout(() => {
-      const mock = MOCK_SCANS[scanIndex % MOCK_SCANS.length];
-      scanIndex++;
-      setScanning(false);
-      setResult(mock);
+    setError(null);
+    try {
+      const photo = await cameraRef.current?.takePictureAsync?.({ quality: 0.7 });
+      if (!photo?.uri) throw new MlScanError(0, 'Could not capture an image.');
+      const health = await scanThermal(photo.uri);
+      setResult(describe(health));
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
-    }, 1500);
+    } catch (e) {
+      const message =
+        e instanceof MlScanError && e.detail
+          ? e.detail
+          : e instanceof MlScanError && e.status === 0
+          ? 'Could not reach the scan service. Check the connection and try again.'
+          : 'Scan failed. Please try again.';
+      setError(message);
+    } finally {
+      setScanning(false);
+    }
   }
 
   function handleAddAsTask() {
-    router.push({ pathname: '/(tabs)/add', params: { prefillTitle: result.taskTitle, prefillCategory: result.category } });
+    router.push({ pathname: '/(tabs)/add', params: { prefillTitle: result.prefillTitle, prefillCategory: result.prefillCategory } });
     setResult(null);
     slideAnim.setValue(300);
   }
@@ -54,11 +89,11 @@ export default function AIScreen() {
 
   return (
     <View style={styles.container}>
-      <CameraView style={StyleSheet.absoluteFill} facing="back" />
+      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
 
       <View style={styles.overlay}>
         <View style={styles.topLabel}>
-          <Text style={styles.topLabelText}>Scan your pet or medicine label</Text>
+          <Text style={styles.topLabelText}>Point at your pet to scan its thermal health</Text>
         </View>
 
         <View style={styles.frameContainer}>
@@ -71,6 +106,9 @@ export default function AIScreen() {
 
         {!result && (
           <View style={styles.bottomArea}>
+            {error && (
+              <Text testID="scan-error" style={styles.errorText}>{error}</Text>
+            )}
             {scanning ? (
               <ActivityIndicator testID="scan-loading" size="large" color={COLORS.white} />
             ) : (
@@ -83,9 +121,12 @@ export default function AIScreen() {
       </View>
 
       {result && (
-        <Animated.View style={[styles.resultCard, { transform: [{ translateY: slideAnim }] }]}>
-          <Text style={styles.resultDetected}>Detected: {result.detected}</Text>
-          <Text style={styles.resultSuggestion}>{result.suggestion}</Text>
+        <Animated.View testID="scan-result" style={[styles.resultCard, { transform: [{ translateY: slideAnim }] }]}>
+          <View style={[styles.statusPill, { backgroundColor: result.healthy ? COLORS.accent : WARNING }]}>
+            <Text style={styles.statusPillText}>{result.healthy ? 'HEALTHY' : 'NEEDS ATTENTION'}</Text>
+          </View>
+          <Text style={styles.resultDetected}>{result.title}</Text>
+          <Text style={styles.resultSuggestion}>{result.detail}</Text>
           <TouchableOpacity style={styles.addBtn} onPress={handleAddAsTask}>
             <Text style={styles.addBtnText}>Add as Task</Text>
           </TouchableOpacity>
@@ -115,6 +156,7 @@ const styles = StyleSheet.create({
   bl: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0 },
   br: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0 },
   bottomArea: { alignItems: 'center', paddingBottom: SPACING.xl * 2 },
+  errorText: { color: '#fff', backgroundColor: 'rgba(230,57,70,0.85)', paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md, textAlign: 'center', fontSize: 14, maxWidth: 320 },
   scanBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' },
   scanBtnInner: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#fff' },
   resultCard: {
@@ -124,6 +166,8 @@ const styles = StyleSheet.create({
     padding: SPACING.xl, paddingBottom: SPACING.xl * 2,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 10,
   },
+  statusPill: { alignSelf: 'flex-start', borderRadius: RADIUS.full, paddingVertical: SPACING.xs, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
+  statusPillText: { color: '#fff', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
   resultDetected: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.sm },
   resultSuggestion: { fontSize: 14, color: COLORS.textSecondary, marginBottom: SPACING.lg },
   addBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center', marginBottom: SPACING.sm },

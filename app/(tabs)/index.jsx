@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTaskContext } from '../../context/TaskContext';
 import { filterTasks } from '../../utils/dateFilters';
 import TaskCard from '../../components/TaskCard';
@@ -20,9 +21,21 @@ function formatDate() {
 }
 
 export default function HomeScreen() {
-  const { tasks, pets, toggleTaskDone, user } = useTaskContext();
+  const { tasks, pets, toggleTaskDone, deleteTask, user, loading, error, reload } = useTaskContext();
   const [mode, setMode] = useState('Daily');
+  const router = useRouter();
   const filtered = filterTasks(tasks, mode.toLowerCase());
+
+  function handleEdit(task) {
+    router.push({ pathname: '/(tabs)/add', params: { editId: task.id } });
+  }
+
+  function handleDelete(task) {
+    Alert.alert('Delete task', `Delete "${task.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteTask(task.id) },
+    ]);
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -40,22 +53,37 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        <SectionHeader title="Tasks" count={filtered.length} />
-
-        {filtered.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🐾</Text>
-            <Text style={styles.emptyText}>No tasks — add one!</Text>
+        {loading ? (
+          <ActivityIndicator testID="home-loading" size="large" color={COLORS.primary} style={{ marginTop: SPACING.xl * 2 }} />
+        ) : error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorIcon}>📡</Text>
+            <Text style={styles.errorText}>Couldn't reach the server.</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={reload}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          filtered.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              pet={pets.find(p => p.id === task.petId)}
-              onToggle={toggleTaskDone}
-            />
-          ))
+          <>
+            <SectionHeader title="Tasks" count={filtered.length} />
+            {filtered.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyIcon}>🐾</Text>
+                <Text style={styles.emptyText}>No tasks — add one!</Text>
+              </View>
+            ) : (
+              filtered.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  pet={pets.find(p => p.id === task.petId)}
+                  onToggle={toggleTaskDone}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -79,4 +107,9 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', marginTop: SPACING.xl * 2 },
   emptyIcon: { fontSize: 48, marginBottom: SPACING.sm },
   emptyText: { fontSize: 16, color: COLORS.textSecondary },
+  errorBox: { alignItems: 'center', marginTop: SPACING.xl * 2, paddingHorizontal: SPACING.lg },
+  errorIcon: { fontSize: 40, marginBottom: SPACING.sm },
+  errorText: { fontSize: 15, color: COLORS.textSecondary, marginBottom: SPACING.md, textAlign: 'center' },
+  retryBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.lg },
+  retryText: { color: COLORS.white, fontWeight: '700' },
 });
