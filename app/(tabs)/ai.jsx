@@ -65,7 +65,7 @@ export default function AIScreen() {
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
     } catch (e) {
       const message =
-        e instanceof MlScanError && e.detail
+        e instanceof MlScanError && typeof e.detail === 'string' && e.detail
           ? e.detail
           : e instanceof MlScanError && e.status === 0
           ? 'Could not reach the scan service. Check the connection and try again.'
