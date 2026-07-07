@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "PawDuty",
+    "slug": "pawduty",
+    "version": "1.0.0",
+    "scheme": "pawduty",
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow PawDuty to access your camera to scan pet documents."
+        }
+      ]
+    ]
+  }
+}
