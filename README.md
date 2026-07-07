@@ -5,6 +5,8 @@ chores across your pets, visualise progress, and run an **AI thermal health scan
 classifies a cat as healthy or unhealthy from a thermal photo. The mobile app is backed
 by two FastAPI services.
 
+Project Report link: https://docs.google.com/document/d/11zZB2eenNUePbnqTZdvYQKI4fR33s5LdiiwukgThjZI/edit?usp=sharing
+
 > This README documents the **whole system** (mobile app + both backends). The app lives
 > in `pawduty-fe/`; the two services live in the sibling repo `ml-pawduty` as `task-api/`
 > and `service/`.
