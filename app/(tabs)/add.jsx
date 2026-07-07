@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, Platform,
+  StyleSheet, SafeAreaView, Platform, Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTaskContext } from '../../context/TaskContext';
-import { generateId } from '../../utils/uuid';
 import { COLORS, SPACING, RADIUS } from '../../constants/theme';
 
 const CATEGORIES = ['vaccination', 'medicine', 'grooming', 'other'];
@@ -33,21 +32,53 @@ function ChipPicker({ label, options, value, onChange }) {
   );
 }
 
+function parseDate(str) {
+  const d = str ? new Date(str + 'T00:00:00') : new Date();
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
 export default function AddScreen() {
-  const { pets, addTask } = useTaskContext();
+  const { pets, addTask, editTask, tasks } = useTaskContext();
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const [title, setTitle] = useState(params.prefillTitle ?? '');
-  const [category, setCategory] = useState(params.prefillCategory ?? 'medicine');
-  const [petId, setPetId] = useState(pets[0]?.id ?? '');
-  const [assignee, setAssignee] = useState('');
-  const [date, setDate] = useState(new Date());
+  const editing = !!params.editId;
+  const existing = editing ? tasks.find(t => t.id === params.editId) : null;
+
+  const [title, setTitle] = useState(existing?.title ?? params.prefillTitle ?? '');
+  const [category, setCategory] = useState(existing?.category ?? params.prefillCategory ?? 'medicine');
+  const [petId, setPetId] = useState(existing?.petId ?? pets[0]?.id ?? '');
+  const [assignee, setAssignee] = useState(existing?.assignee?.name ?? '');
+  const [date, setDate] = useState(parseDate(existing?.date));
   const [showDate, setShowDate] = useState(false);
-  const [time, setTime] = useState('');
-  const [repeat, setRepeat] = useState('once');
-  const [note, setNote] = useState('');
+  const [time, setTime] = useState(existing?.time ?? '');
+  const [repeat, setRepeat] = useState(existing?.repeat ?? 'once');
+  const [note, setNote] = useState(existing?.note ?? '');
   const [errors, setErrors] = useState({});
+  // "hydrated" is true when the edit form has been populated. In create mode
+  // there's nothing to hydrate. In edit mode the provider may still be loading
+  // tasks at mount (useState initializers ran with existing===undefined), so we
+  // hydrate from `existing` once it becomes available.
+  const [hydrated, setHydrated] = useState(editing ? !!existing : true);
+
+  useEffect(() => {
+    if (editing && existing && !hydrated) {
+      setTitle(existing.title);
+      setCategory(existing.category);
+      setPetId(existing.petId);
+      setAssignee(existing.assignee?.name ?? '');
+      setDate(parseDate(existing.date));
+      setTime(existing.time ?? '');
+      setRepeat(existing.repeat ?? 'once');
+      setNote(existing.note ?? '');
+      setHydrated(true);
+    }
+  }, [editing, existing, hydrated]);
+
+  // Default the pet selection once pets load (create mode / none chosen yet).
+  useEffect(() => {
+    if (!petId && pets.length) setPetId(pets[0].id);
+  }, [pets, petId]);
 
   function validate() {
     const e = {};
@@ -59,29 +90,33 @@ export default function AddScreen() {
   async function handleSave() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    const name = assignee.trim();
-    const initials = name
-      ? name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
-      : '';
-    await addTask({
-      id: generateId(),
+    const dateStr = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+    const fields = {
       title: title.trim(),
       category,
       petId,
-      assignee: { name, initials },
-      date: [date.getFullYear(), String(date.getMonth()+1).padStart(2,'0'), String(date.getDate()).padStart(2,'0')].join('-'),
+      assignee: { name: assignee.trim() },
+      date: dateStr,
       time,
       repeat,
       note: note.trim(),
-      done: false,
-    });
-    router.replace('/(tabs)/');
+    };
+    try {
+      if (editing) {
+        await editTask(params.editId, fields);
+      } else {
+        await addTask({ ...fields, done: false });
+      }
+      router.replace('/(tabs)/');
+    } catch (err) {
+      Alert.alert('Save failed', err?.detail || 'Could not reach the server. Please try again.');
+    }
   }
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>Add Task</Text>
+        <Text style={styles.heading}>{editing ? 'Edit Task' : 'Add Task'}</Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>Task name *</Text>
@@ -90,7 +125,7 @@ export default function AddScreen() {
             placeholder="e.g. Give Mochi flea medicine"
             placeholderTextColor={COLORS.textSecondary}
             value={title}
-            onChangeText={t => { setTitle(t); setErrors(e => ({ ...e, title: undefined })); }}
+            onChangeText={t => { setTitle(t); setErrors(er => ({ ...er, title: undefined })); }}
           />
           {errors.title && <Text style={styles.error}>{errors.title}</Text>}
         </View>
@@ -104,7 +139,7 @@ export default function AddScreen() {
               <TouchableOpacity
                 key={pet.id}
                 style={[styles.chip, petId === pet.id && styles.chipActive]}
-                onPress={() => { setPetId(pet.id); setErrors(e => ({ ...e, petId: undefined })); }}
+                onPress={() => { setPetId(pet.id); setErrors(er => ({ ...er, petId: undefined })); }}
               >
                 <Text style={[styles.chipText, petId === pet.id && styles.chipTextActive]}>{pet.name}</Text>
               </TouchableOpacity>
@@ -167,7 +202,7 @@ export default function AddScreen() {
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>Save Task</Text>
+          <Text style={styles.saveBtnText}>{editing ? 'Save Changes' : 'Save Task'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
