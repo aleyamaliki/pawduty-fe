@@ -1,6 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, ActivityIndicator } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import React, { useState } from 'react';
+import {
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView, SafeAreaView,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { scanThermal, MlScanError } from '../../utils/mlApi';
 import { COLORS, SPACING, RADIUS } from '../../constants/theme';
@@ -30,39 +33,35 @@ function describe(health) {
 }
 
 export default function AIScreen() {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [imageUri, setImageUri] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const slideAnim = useRef(new Animated.Value(300)).current;
-  const cameraRef = useRef(null);
   const router = useRouter();
 
-  if (!permission) {
-    return <View style={styles.center}><Text>Checking camera…</Text></View>;
+  async function handlePick() {
+    setError(null);
+    let picked;
+    try {
+      picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    } catch (e) {
+      setError('Could not open the image library.');
+      return;
+    }
+    if (picked.canceled) return;
+    const uri = picked.assets?.[0]?.uri;
+    if (!uri) return;
+    setImageUri(uri);
+    setResult(null);
+    await runScan(uri);
   }
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.permText}>Camera access is needed to scan.</Text>
-        <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
-          <Text style={styles.permBtnText}>Grant Permission</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  async function handleScan() {
-    if (scanning || result) return;
+  async function runScan(uri) {
     setScanning(true);
     setError(null);
     try {
-      const photo = await cameraRef.current?.takePictureAsync?.({ quality: 0.7 });
-      if (!photo?.uri) throw new MlScanError(0, 'Could not capture an image.');
-      const health = await scanThermal(photo.uri);
+      const health = await scanThermal(uri);
       setResult(describe(health));
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
     } catch (e) {
       const message =
         e instanceof MlScanError && typeof e.detail === 'string' && e.detail
@@ -78,100 +77,109 @@ export default function AIScreen() {
 
   function handleAddAsTask() {
     router.push({ pathname: '/(tabs)/add', params: { prefillTitle: result.prefillTitle, prefillCategory: result.prefillCategory } });
-    setResult(null);
-    slideAnim.setValue(300);
+    reset();
   }
 
-  function handleDismiss() {
+  function reset() {
+    setImageUri(null);
     setResult(null);
-    slideAnim.setValue(300);
+    setError(null);
+    setScanning(false);
   }
 
   return (
-    <View style={styles.container}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+    <SafeAreaView style={styles.safe}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.heading}>Thermal Health Scan</Text>
+        <Text style={styles.sub}>
+          Upload a thermal image of your cat (INFERNO-colormapped, with the min/max °C badges)
+          to check for abnormal body-heat patterns.
+        </Text>
 
-      <View style={styles.overlay}>
-        <View style={styles.topLabel}>
-          <Text style={styles.topLabelText}>Point at your pet to scan its thermal health</Text>
-        </View>
+        {imageUri ? (
+          <Image testID="scan-preview" source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
+        ) : (
+          <TouchableOpacity testID="pick-button" style={styles.dropzone} onPress={handlePick} activeOpacity={0.8}>
+            <Ionicons name="cloud-upload-outline" size={46} color={COLORS.primary} />
+            <Text style={styles.dropzoneText}>Tap to select a thermal image</Text>
+          </TouchableOpacity>
+        )}
 
-        <View style={styles.frameContainer}>
-          <View style={styles.frame}>
-            {[styles.tl, styles.tr, styles.bl, styles.br].map((pos, i) => (
-              <View key={i} style={[styles.corner, pos]} />
-            ))}
-          </View>
-        </View>
-
-        {!result && (
-          <View style={styles.bottomArea}>
-            {error && (
-              <Text testID="scan-error" style={styles.errorText}>{error}</Text>
-            )}
-            {scanning ? (
-              <ActivityIndicator testID="scan-loading" size="large" color={COLORS.white} />
-            ) : (
-              <TouchableOpacity testID="scan-button" style={styles.scanBtn} onPress={handleScan} activeOpacity={0.8}>
-                <View style={styles.scanBtnInner} />
-              </TouchableOpacity>
-            )}
+        {scanning && (
+          <View style={styles.center}>
+            <ActivityIndicator testID="scan-loading" size="large" color={COLORS.primary} />
+            <Text style={styles.scanningText}>Analyzing…</Text>
           </View>
         )}
-      </View>
 
-      {result && (
-        <Animated.View testID="scan-result" style={[styles.resultCard, { transform: [{ translateY: slideAnim }] }]}>
-          <View style={[styles.statusPill, { backgroundColor: result.healthy ? COLORS.accent : WARNING }]}>
-            <Text style={styles.statusPillText}>{result.healthy ? 'HEALTHY' : 'NEEDS ATTENTION'}</Text>
+        {error && !scanning && (
+          <View style={styles.errorBox}>
+            <Text testID="scan-error" style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={handlePick}>
+              <Text style={styles.secondaryBtnText}>Choose another image</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.resultDetected}>{result.title}</Text>
-          <Text style={styles.resultSuggestion}>{result.detail}</Text>
-          <TouchableOpacity style={styles.addBtn} onPress={handleAddAsTask}>
-            <Text style={styles.addBtnText}>Add as Task</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.dismissBtn} onPress={handleDismiss}>
-            <Text style={styles.dismissText}>Dismiss</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-    </View>
+        )}
+
+        {result && !scanning && (
+          <View testID="scan-result" style={styles.resultCard}>
+            <View style={[styles.statusPill, { backgroundColor: result.healthy ? COLORS.accent : WARNING }]}>
+              <Text style={styles.statusPillText}>{result.healthy ? 'HEALTHY' : 'NEEDS ATTENTION'}</Text>
+            </View>
+            <Text style={styles.resultTitle}>{result.title}</Text>
+            <Text style={styles.resultDetail}>{result.detail}</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={handleAddAsTask}>
+              <Text style={styles.addBtnText}>Add as Task</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dismissBtn} onPress={reset}>
+              <Text style={styles.dismissText}>Scan another</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <Text style={styles.disclaimer}>
+          Experimental, non-diagnostic aid (~76% accuracy on thermal images). Always consult a vet.
+        </Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.background, padding: SPACING.xl },
-  permText: { fontSize: 16, color: COLORS.textPrimary, textAlign: 'center', marginBottom: SPACING.md },
-  permBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, padding: SPACING.md, paddingHorizontal: SPACING.xl },
-  permBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  overlay: { flex: 1 },
-  topLabel: { backgroundColor: 'rgba(0,0,0,0.5)', padding: SPACING.md, alignItems: 'center', marginTop: 60 },
-  topLabelText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  frameContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  frame: { width: 240, height: 240, position: 'relative' },
-  corner: { position: 'absolute', width: 30, height: 30, borderColor: '#fff', borderWidth: 3 },
-  tl: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0 },
-  tr: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0 },
-  bl: { bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0 },
-  br: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0 },
-  bottomArea: { alignItems: 'center', paddingBottom: SPACING.xl * 2 },
-  errorText: { color: '#fff', backgroundColor: 'rgba(230,57,70,0.85)', paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md, textAlign: 'center', fontSize: 14, maxWidth: 320 },
-  scanBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' },
-  scanBtnInner: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#fff' },
+  safe: { flex: 1, backgroundColor: COLORS.background },
+  scroll: { padding: SPACING.md, paddingBottom: SPACING.xl * 2 },
+  heading: { fontSize: 24, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.xs },
+  sub: { fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.lg, lineHeight: 18 },
+  dropzone: {
+    borderWidth: 2, borderColor: COLORS.border, borderStyle: 'dashed', borderRadius: RADIUS.lg,
+    paddingVertical: SPACING.xl * 1.5, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.card, gap: SPACING.sm,
+  },
+  dropzoneText: { fontSize: 15, fontWeight: '600', color: COLORS.textSecondary },
+  preview: { width: '100%', aspectRatio: 4 / 3, borderRadius: RADIUS.lg, backgroundColor: '#000' },
+  center: { alignItems: 'center', marginTop: SPACING.lg, gap: SPACING.sm },
+  scanningText: { fontSize: 14, color: COLORS.textSecondary },
+  errorBox: { marginTop: SPACING.lg, alignItems: 'center', gap: SPACING.md },
+  errorText: {
+    color: '#fff', backgroundColor: WARNING, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md, textAlign: 'center', fontSize: 14,
+  },
   resultCard: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: COLORS.card,
-    borderTopLeftRadius: RADIUS.lg * 2, borderTopRightRadius: RADIUS.lg * 2,
-    padding: SPACING.xl, paddingBottom: SPACING.xl * 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 10,
+    marginTop: SPACING.lg, backgroundColor: COLORS.card, borderRadius: RADIUS.lg, padding: SPACING.lg,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
   },
   statusPill: { alignSelf: 'flex-start', borderRadius: RADIUS.full, paddingVertical: SPACING.xs, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   statusPillText: { color: '#fff', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
-  resultDetected: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.sm },
-  resultSuggestion: { fontSize: 14, color: COLORS.textSecondary, marginBottom: SPACING.lg },
+  resultTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  resultDetail: { fontSize: 14, color: COLORS.textSecondary, marginBottom: SPACING.lg, lineHeight: 20 },
   addBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center', marginBottom: SPACING.sm },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   dismissBtn: { alignItems: 'center', padding: SPACING.sm },
   dismissText: { color: COLORS.textSecondary, fontSize: 14 },
+  secondaryBtn: {
+    borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg, alignItems: 'center',
+  },
+  secondaryBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
+  disclaimer: { fontSize: 11, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.xl, lineHeight: 16 },
 });

@@ -47,7 +47,7 @@ export default function TabLayout() {
         name="ai"
         options={{
           title: 'AI',
-          tabBarIcon: ({ color, size }) => <Ionicons name="camera" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="image" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
