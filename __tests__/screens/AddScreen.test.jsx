@@ -66,3 +66,11 @@ test('edit mode prefills the title and PATCHes on save', async () => {
   await act(async () => { fireEvent.press(getByText('Save Changes')); });
   expect(api.updateTask).toHaveBeenCalledWith('t1', expect.objectContaining({ title: 'Existing task' }));
 });
+
+test('edit mode preserves a user edit on save', async () => {
+  mockParams = { editId: 't1' };
+  const { getByDisplayValue, getByText } = await renderAdd();
+  await act(async () => { fireEvent.changeText(getByDisplayValue('Existing task'), 'User Edit'); });
+  await act(async () => { fireEvent.press(getByText('Save Changes')); });
+  expect(api.updateTask).toHaveBeenCalledWith('t1', expect.objectContaining({ title: 'User Edit' }));
+});

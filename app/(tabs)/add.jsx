@@ -62,7 +62,10 @@ export default function AddScreen() {
   const [hydrated, setHydrated] = useState(editing ? !!existing : true);
 
   useEffect(() => {
-    if (editing && existing && !hydrated) {
+    if (
+      editing && existing && !hydrated &&
+      !title.trim() && !assignee && !note   // only hydrate a still-pristine form
+    ) {
       setTitle(existing.title);
       setCategory(existing.category);
       setPetId(existing.petId);
@@ -73,7 +76,7 @@ export default function AddScreen() {
       setNote(existing.note ?? '');
       setHydrated(true);
     }
-  }, [editing, existing, hydrated]);
+  }, [editing, existing, hydrated, title, assignee, note]);
 
   // Default the pet selection once pets load (create mode / none chosen yet).
   useEffect(() => {
