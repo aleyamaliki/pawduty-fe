@@ -6,7 +6,8 @@ classifies a cat as healthy or unhealthy from a thermal photo. The mobile app is
 by two FastAPI services.
 
 Project Report link: https://docs.google.com/document/d/11zZB2eenNUePbnqTZdvYQKI4fR33s5LdiiwukgThjZI/edit?usp=sharing
-ML ngan CRUD service repo link: https://github.com/AqilJaafree/ml-pawduty
+
+Backend repo link: https://github.com/AqilJaafree/ml-pawduty
 
 
 > This README documents the **whole system** (mobile app + both backends). The app lives
