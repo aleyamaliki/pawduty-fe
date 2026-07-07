@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import TaskCard from '../../components/TaskCard';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
@@ -12,16 +12,50 @@ const task = {
 const pet = { id: 'p1', name: 'Mochi', avatarColor: '#FFD166' };
 
 test('renders task title', async () => {
-  const { getByText } = await render(<TaskCard task={task} pet={pet} onToggle={jest.fn()} />);
+  let getByText;
+  await act(async () => {
+    ({ getByText } = await render(<TaskCard task={task} pet={pet} onToggle={jest.fn()} />));
+  });
   expect(getByText('Give Mochi flea medicine')).toBeTruthy();
 });
 test('calls onToggle with task id when checkbox pressed', async () => {
   const onToggle = jest.fn();
-  const { getByTestId } = await render(<TaskCard task={task} pet={pet} onToggle={onToggle} />);
+  let getByTestId;
+  await act(async () => {
+    ({ getByTestId } = await render(<TaskCard task={task} pet={pet} onToggle={onToggle} />));
+  });
   fireEvent.press(getByTestId('task-checkbox'));
   expect(onToggle).toHaveBeenCalledWith('t1');
 });
 test('shows pet name', async () => {
-  const { getByText } = await render(<TaskCard task={task} pet={pet} onToggle={jest.fn()} />);
+  let getByText;
+  await act(async () => {
+    ({ getByText } = await render(<TaskCard task={task} pet={pet} onToggle={jest.fn()} />));
+  });
   expect(getByText('Mochi')).toBeTruthy();
+});
+test('calls onDelete with task when trash pressed', async () => {
+  const onDelete = jest.fn();
+  let getByTestId;
+  await act(async () => {
+    ({ getByTestId } = await render(<TaskCard task={task} pet={pet} onToggle={jest.fn()} onDelete={onDelete} />));
+  });
+  fireEvent.press(getByTestId('task-delete'));
+  expect(onDelete).toHaveBeenCalledWith(task);
+});
+test('calls onEdit with task when body pressed', async () => {
+  const onEdit = jest.fn();
+  let getByTestId;
+  await act(async () => {
+    ({ getByTestId } = await render(<TaskCard task={task} pet={pet} onToggle={jest.fn()} onEdit={onEdit} />));
+  });
+  fireEvent.press(getByTestId('task-edit'));
+  expect(onEdit).toHaveBeenCalledWith(task);
+});
+test('does not render trash when onDelete absent', async () => {
+  let queryByTestId;
+  await act(async () => {
+    ({ queryByTestId } = await render(<TaskCard task={task} pet={pet} onToggle={jest.fn()} />));
+  });
+  expect(queryByTestId('task-delete')).toBeNull();
 });
