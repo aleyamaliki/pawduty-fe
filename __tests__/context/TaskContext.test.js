@@ -97,3 +97,22 @@ test('deleteTask removes the task', async () => {
   expect(api.deleteTask).toHaveBeenCalledWith('t1');
   expect(getByTestId('tc').props.children).toBe('0');
 });
+
+test('updateUser persists merged fields to AsyncStorage', async () => {
+  const AsyncStorage = require('@react-native-async-storage/async-storage');
+  let ctx;
+  function C() { ctx = useTaskContext(); return <Probe testID="name" value={ctx.user.name} />; }
+  const { getByTestId } = await renderHook(C);
+  await act(async () => { await ctx.updateUser({ name: 'Riley' }); });
+  expect(getByTestId('name').props.children).toBe('Riley');
+  expect(AsyncStorage.setItem).toHaveBeenCalledWith('@pawduty_user', expect.stringContaining('Riley'));
+});
+
+test('deleteTask re-inserts the task on API failure', async () => {
+  api.deleteTask.mockRejectedValueOnce(new Error('network'));
+  let ctx;
+  function C() { ctx = useTaskContext(); return <Probe testID="tc" value={ctx.tasks.length} />; }
+  const { getByTestId } = await renderHook(C);
+  await act(async () => { await ctx.deleteTask('t1'); });
+  expect(getByTestId('tc').props.children).toBe('1'); // reverted
+});

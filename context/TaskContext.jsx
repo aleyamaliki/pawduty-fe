@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SEED_USER } from '../data/seed';
 import { api } from '../utils/api';
@@ -13,6 +13,10 @@ export function TaskProvider({ children }) {
   const [user, setUser] = useState(SEED_USER);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Mirror `user` so updateUser can merge without reading a stale closure value.
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -32,8 +36,12 @@ export function TaskProvider({ children }) {
 
   useEffect(() => {
     (async () => {
-      const raw = await AsyncStorage.getItem(USER_KEY);
-      if (raw) setUser(JSON.parse(raw));
+      try {
+        const raw = await AsyncStorage.getItem(USER_KEY);
+        if (raw) setUser(JSON.parse(raw));
+      } catch (e) {
+        // ignore corrupted/unreadable stored user; keep SEED_USER default
+      }
     })();
   }, []);
 
@@ -60,7 +68,6 @@ export function TaskProvider({ children }) {
       setTasks(prev => prev.map(t => (t.id === id ? updated : t)));
     } catch (e) {
       setTasks(prev => prev.map(t => (t.id === id ? { ...t, done: !next } : t)));
-      setError(e);
     }
   }
 
@@ -71,14 +78,14 @@ export function TaskProvider({ children }) {
       await api.deleteTask(id);
     } catch (e) {
       setTasks(snapshot);
-      setError(e);
     }
   }
 
   async function updateUser(fields) {
-    setUser(prev => ({ ...prev, ...fields }));
-    const updated = { ...user, ...fields };
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
+    const next = { ...userRef.current, ...fields };
+    userRef.current = next;
+    setUser(next);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(next));
   }
 
   return (
